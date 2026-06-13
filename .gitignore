@@ -1,0 +1,22 @@
+# Env
+.env
+!.env.example
+firebase-service-account.json
+
+# Go
+cinema-ticket-booking-server/bin/
+cinema-ticket-booking-server/*.out
+
+# Node
+cinema-ticket-booking-client/node_modules/
+cinema-ticket-booking-client/dist/
+
+# Docker volumes
+mongo_data/
+redis_data/
+rabbitmq_data/
+
+# IDE
+.vscode/
+.idea/
+*.swp

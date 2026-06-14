@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { useRoute } from 'vue-router'
 import LoginSession from '@/components/auth/LoginSession.vue'
+
+const route = useRoute()
 </script>
 
 <template>
@@ -9,7 +12,10 @@ import LoginSession from '@/components/auth/LoginSession.vue'
   </header>
 
   <main class="app-main">
-    <RouterView />
+    <!-- key forces a fresh component instance on every route change,
+         so fetchSeats / fetchShowtimes and useShowtimeSocket always
+         start from scratch with the correct showtimeId. -->
+    <RouterView :key="route.path" />
   </main>
 </template>
 

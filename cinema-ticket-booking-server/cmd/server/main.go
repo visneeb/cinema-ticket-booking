@@ -24,6 +24,8 @@ import (
 	"cinema-ticket-booking/internal/config"
 	"cinema-ticket-booking/internal/handler"
 	"cinema-ticket-booking/internal/middleware"
+	"cinema-ticket-booking/internal/service"
+	wshub "cinema-ticket-booking/internal/websocket"
 	"cinema-ticket-booking/pkg/rabbitmq"
 )
 
@@ -49,7 +51,15 @@ func main() {
 		log.Fatalf("rabbitmq publisher: %v", err)
 	}
 
-	h := handler.New(db, rdb, mq, authCl, pub)
+	hub := wshub.NewHub()
+	go hub.Run()
+
+	svc := service.NewBookingService(db, rdb, pub, hub)
+	if err := svc.StartAuditConsumer(mq); err != nil {
+		log.Printf("audit consumer: %v", err)
+	}
+
+	h := handler.New(db, rdb, mq, authCl, pub, svc, hub)
 	router := setupRouter(h)
 	runServer(router, cfg.Port)
 }
@@ -102,14 +112,20 @@ func setupRouter(h *handler.Handler) *gin.Engine {
 	// Swagger UI — http://localhost:8080/swagger/index.html
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
+	// WebSocket — no auth middleware (token can be sent as query param if needed)
+	router.GET("/ws/showtimes/:showtime_id", h.ServeWS)
+
 	api := router.Group("/api")
 	{
 		// Users
 		api.POST("/users/me", middleware.Auth(h.AuthCl), h.UpsertUser)
 
 		// Showtimes & Bookings
+		api.GET("/showtimes", h.GetShowtimes)
 		api.GET("/showtimes/:showtime_id/seats", h.GetSeats)
+		api.GET("/showtimes/:showtime_id/my-lock", middleware.Auth(h.AuthCl), h.GetMyLock)
 		api.POST("/showtimes/:showtime_id/seats/:seat_id/lock", middleware.Auth(h.AuthCl), h.LockSeat)
+		api.DELETE("/showtimes/:showtime_id/seats/:seat_id/lock", middleware.Auth(h.AuthCl), h.ReleaseLock)
 		api.POST("/showtimes/:showtime_id/seats/:seat_id/book", middleware.Auth(h.AuthCl), h.ConfirmBooking)
 	}
 

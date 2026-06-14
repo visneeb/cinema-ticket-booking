@@ -51,7 +51,7 @@ func (s *BookingService) StartNotificationConsumer(conn *amqp.Connection) error 
 			log.Printf("[Notify] unmarshal error: %v", err)
 			return
 		}
-		// Mock email — swap for real mailer in production.
+		// Mock email
 		log.Printf("[Notify] EMAIL → user_id=%s seat=%s showtime=%s status=%s",
 			b.UserID, b.SeatID, b.ShowtimeID, b.Status)
 	})

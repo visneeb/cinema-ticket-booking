@@ -8,11 +8,24 @@ import (
 	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	_ "cinema-ticket-booking/docs"
 	"cinema-ticket-booking/internal/config"
+	"cinema-ticket-booking/internal/handler"
 )
+
+// @title           Cinema Ticket Booking API
+// @version         1.0
+// @description     Cinema seat booking API
+// @host            localhost:8080
+// @BasePath        /api
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 
 func main() {
     cfg := config.Load()
@@ -51,7 +64,15 @@ func main() {
         c.JSON(200, gin.H{"message": "pong"})
     })
 
-    // TODO: wire middleware + handlers using db, rdb, amqpConn, authClient
+    // Swagger UI — http://localhost:8080/swagger/index.html
+    router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+    api := router.Group("/api")
+    {
+        api.GET("/showtimes/:showtime_id/seats", handler.GetSeats)
+        api.POST("/showtimes/:showtime_id/seats/:seat_id/lock", handler.LockSeat)
+        api.POST("/showtimes/:showtime_id/seats/:seat_id/book", handler.ConfirmBooking)
+    }
 
     log.Printf("server starting on :%s", cfg.Port)
     if err := router.Run(":" + cfg.Port); err != nil {

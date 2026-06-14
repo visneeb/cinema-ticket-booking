@@ -1,0 +1,125 @@
+basePath: /api
+definitions:
+  handler.MessageResponse:
+    properties:
+      message:
+        type: string
+    type: object
+  handler.SeatResponse:
+    properties:
+      id:
+        type: string
+      label:
+        type: string
+      showtime_id:
+        type: string
+      status:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Cinema seat booking API
+  title: Cinema Ticket Booking API
+  version: "1.0"
+paths:
+  /api/showtimes/{showtime_id}/seats:
+    get:
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: showtime_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handler.SeatResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+      summary: List seats for a showtime
+      tags:
+      - seats
+  /api/showtimes/{showtime_id}/seats/{seat_id}/book:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: showtime_id
+        required: true
+        type: string
+      - description: Seat ID
+        in: path
+        name: seat_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+      security:
+      - BearerAuth: []
+      summary: Confirm booking after payment
+      tags:
+      - bookings
+  /api/showtimes/{showtime_id}/seats/{seat_id}/lock:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: showtime_id
+        required: true
+        type: string
+      - description: Seat ID
+        in: path
+        name: seat_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+      security:
+      - BearerAuth: []
+      summary: Lock a seat for payment
+      tags:
+      - seats
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

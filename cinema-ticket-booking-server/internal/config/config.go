@@ -21,7 +21,7 @@ func Load() *Config {
 		MongoURI:       getEnv("MONGO_URI", ""),
 		MongoDB:        getEnv("MONGO_DB", "cinema"),
 		RedisAddr:      getEnv("REDIS_ADDR", "redis:6379"),
-		RabbitMQURL:    getEnv("RABBITMQ_URL", "amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/"),
+		RabbitMQURL:    getEnv("RABBITMQ_URL", ""),
 	}
 }
 

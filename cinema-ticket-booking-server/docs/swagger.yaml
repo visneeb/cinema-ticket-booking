@@ -5,6 +5,20 @@ definitions:
       message:
         type: string
     type: object
+  handler.MyLocksResponse:
+    properties:
+      locks:
+        items:
+          $ref: '#/definitions/handler.SeatLock'
+        type: array
+    type: object
+  handler.SeatLock:
+    properties:
+      seat_id:
+        type: string
+      seconds_left:
+        type: integer
+    type: object
   handler.SeatResponse:
     properties:
       id:
@@ -16,6 +30,93 @@ definitions:
       status:
         type: string
     type: object
+  handler.ShowtimeResponse:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      movie_id:
+        type: string
+      starts_at:
+        type: string
+      title:
+        type: string
+    type: object
+  handler.UserProfile:
+    properties:
+      created_at:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      last_login_at:
+        type: string
+      photo_url:
+        type: string
+      role:
+        $ref: '#/definitions/model.Role'
+      uid:
+        type: string
+    type: object
+  model.AdminBookingItem:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      movie_id:
+        type: string
+      seat_id:
+        type: string
+      seat_label:
+        type: string
+      seat_status:
+        type: string
+      showtime_id:
+        type: string
+      status:
+        type: string
+      user_id:
+        type: string
+    type: object
+  model.AdminBookingResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/model.AdminBookingItem'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  model.Booking:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      seat_id:
+        type: string
+      showtime_id:
+        type: string
+      status:
+        type: string
+      user_id:
+        type: string
+    type: object
+  model.Role:
+    enum:
+    - user
+    - admin
+    type: string
+    x-enum-varnames:
+    - RoleUser
+    - RoleAdmin
 host: localhost:8080
 info:
   contact: {}
@@ -23,10 +124,149 @@ info:
   title: Cinema Ticket Booking API
   version: "1.0"
 paths:
+  /api/admin/bookings:
+    get:
+      parameters:
+      - description: Movie ObjectID hex
+        in: query
+        name: movie_id
+        type: string
+      - description: User UID
+        in: query
+        name: user_id
+        type: string
+      - description: Start date YYYY-MM-DD
+        in: query
+        name: date_from
+        type: string
+      - description: End date YYYY-MM-DD
+        in: query
+        name: date_to
+        type: string
+      - description: Booking status
+        in: query
+        name: status
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (default 20, max 100)
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.AdminBookingResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+      security:
+      - BearerAuth: []
+      summary: List all bookings (admin)
+      tags:
+      - admin
+  /api/admin/movies:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+      security:
+      - BearerAuth: []
+      summary: List all movies (admin)
+      tags:
+      - admin
+  /api/admin/users:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+      security:
+      - BearerAuth: []
+      summary: List all users (admin)
+      tags:
+      - admin
+  /api/showtimes:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handler.ShowtimeResponse'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+      summary: List all showtimes
+      tags:
+      - showtimes
+  /api/showtimes/{showtime_id}/my-lock:
+    get:
+      parameters:
+      - description: Showtime ObjectID hex
+        in: path
+        name: showtime_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.MyLocksResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+      security:
+      - BearerAuth: []
+      summary: Get caller's active seat locks
+      tags:
+      - seats
   /api/showtimes/{showtime_id}/seats:
     get:
       parameters:
-      - description: Showtime ID
+      - description: Showtime ObjectID hex
         in: path
         name: showtime_id
         required: true
@@ -44,6 +284,10 @@ paths:
           description: Bad Request
           schema:
             $ref: '#/definitions/handler.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
       summary: List seats for a showtime
       tags:
       - seats
@@ -56,6 +300,43 @@ paths:
         required: true
         type: string
       - description: Seat ID
+        in: path
+        name: seat_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.Booking'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+      security:
+      - BearerAuth: []
+      summary: Confirm booking after payment
+      tags:
+      - bookings
+  /api/showtimes/{showtime_id}/seats/{seat_id}/lock:
+    delete:
+      parameters:
+      - description: Showtime ObjectID hex
+        in: path
+        name: showtime_id
+        required: true
+        type: string
+      - description: Seat ObjectID hex
         in: path
         name: seat_id
         required: true
@@ -81,10 +362,9 @@ paths:
             $ref: '#/definitions/handler.MessageResponse'
       security:
       - BearerAuth: []
-      summary: Confirm booking after payment
+      summary: Release an active seat lock
       tags:
-      - bookings
-  /api/showtimes/{showtime_id}/seats/{seat_id}/lock:
+      - seats
     post:
       parameters:
       - description: Showtime ID
@@ -121,6 +401,40 @@ paths:
       summary: Lock a seat for payment
       tags:
       - seats
+  /api/users/me:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.UserProfile'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+      security:
+      - BearerAuth: []
+      summary: Upsert current user profile
+      tags:
+      - users
+  /ws/showtimes/{showtime_id}:
+    get:
+      parameters:
+      - description: Showtime ID
+        in: path
+        name: showtime_id
+        required: true
+        type: string
+      responses: {}
+      summary: WebSocket seat-status stream
+      tags:
+      - websocket
 securityDefinitions:
   BearerAuth:
     in: header

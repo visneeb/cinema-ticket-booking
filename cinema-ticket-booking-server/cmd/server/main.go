@@ -24,6 +24,8 @@ import (
 	"cinema-ticket-booking/internal/config"
 	"cinema-ticket-booking/internal/handler"
 	"cinema-ticket-booking/internal/middleware"
+	"cinema-ticket-booking/internal/model"
+	"cinema-ticket-booking/internal/repository"
 	"cinema-ticket-booking/internal/service"
 	wshub "cinema-ticket-booking/internal/websocket"
 	"cinema-ticket-booking/pkg/rabbitmq"
@@ -54,13 +56,31 @@ func main() {
 	hub := wshub.NewHub()
 	go hub.Run()
 
-	svc := service.NewBookingService(db, rdb, pub, hub)
-	if err := svc.StartAuditConsumer(mq); err != nil {
-		log.Printf("audit consumer: %v", err)
+	lockRepo    := repository.NewSeatLockRepository(rdb)
+	bookingRepo := repository.NewBookingRepository(db)
+	adminRepo   := repository.NewRepository(db)
+	userRepo    := repository.NewUserRepository(db)
+
+	svc := service.NewBookingService(lockRepo, bookingRepo, pub, hub)
+	for name, fn := range map[string]func(*amqp.Connection) error{
+		"audit-timeout":    svc.StartAuditConsumer,
+		"audit-log":        svc.StartAuditLogConsumer,
+		"notification":     svc.StartNotificationConsumer,
+	} {
+		if err := fn(mq); err != nil {
+			log.Printf("%s consumer: %v", name, err)
+		}
 	}
 
-	h := handler.New(db, rdb, mq, authCl, pub, svc, hub)
-	router := setupRouter(h)
+	adminSvc := service.NewAdminService(bookingRepo, adminRepo)
+	userSvc  := service.NewUserService(userRepo)
+
+	h := handler.New(authCl, hub, handler.Services{
+		Booking: svc,
+		User:    userSvc,
+		Admin:   adminSvc,
+	})
+	router := setupRouter(h, userRepo)
 	runServer(router, cfg.Port)
 }
 
@@ -96,7 +116,7 @@ func initFirebase(ctx context.Context) *firebaseAuth.Client {
 	return authClient
 }
 
-func setupRouter(h *handler.Handler) *gin.Engine {
+func setupRouter(h *handler.Handler, userRepo *repository.UserRepository) *gin.Engine {
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
@@ -127,6 +147,17 @@ func setupRouter(h *handler.Handler) *gin.Engine {
 		api.POST("/showtimes/:showtime_id/seats/:seat_id/lock", middleware.Auth(h.AuthCl), h.LockSeat)
 		api.DELETE("/showtimes/:showtime_id/seats/:seat_id/lock", middleware.Auth(h.AuthCl), h.ReleaseLock)
 		api.POST("/showtimes/:showtime_id/seats/:seat_id/book", middleware.Auth(h.AuthCl), h.ConfirmBooking)
+
+		// Admin — requires authentication + admin role
+		admin := api.Group("/admin",
+			middleware.Auth(h.AuthCl),
+			middleware.RequireRole(userRepo.FindByUID, model.RoleAdmin),
+		)
+		{
+			admin.GET("/bookings", h.ListBookings)
+			admin.GET("/movies",   h.ListMovies)
+			admin.GET("/users",    h.ListUsers)
+		}
 	}
 
 	return router

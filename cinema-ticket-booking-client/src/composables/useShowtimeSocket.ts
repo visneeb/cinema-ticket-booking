@@ -1,4 +1,4 @@
-﻿import { ref, onUnmounted } from 'vue'
+﻿import { ref } from 'vue'
 import type { SeatEvent } from '@/types/seat'
 
 export type WsStatus = 'connecting' | 'open' | 'closed' | 'error'
@@ -6,11 +6,11 @@ export type WsStatus = 'connecting' | 'open' | 'closed' | 'error'
 /**
  * Opens a WebSocket to /ws/showtimes/:showtimeId and returns typed seat events.
  * Auto-reconnects every 3 s on disconnect.
+ * Call cleanup() to tear down the socket (e.g. on navigation or unmount).
  */
 export function useShowtimeSocket(showtimeId: string) {
   const lastEvent = ref<SeatEvent | null>(null)
-  // No showtime → stay 'open' so no reconnect banner is shown on the home page
-  const wsStatus = ref<WsStatus>(showtimeId ? 'connecting' : 'open')
+  const wsStatus = ref<WsStatus>('connecting')
 
   let socket: WebSocket | null = null
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -49,13 +49,13 @@ export function useShowtimeSocket(showtimeId: string) {
     }
   }
 
-  connect()
-
-  onUnmounted(() => {
+  function cleanup() {
     destroyed = true
     if (reconnectTimer) clearTimeout(reconnectTimer)
     socket?.close()
-  })
+  }
 
-  return { lastEvent, wsStatus }
+  connect()
+
+  return { lastEvent, wsStatus, cleanup }
 }

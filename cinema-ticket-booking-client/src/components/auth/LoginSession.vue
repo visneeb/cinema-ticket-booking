@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
 const loading = ref(false)
 const error = ref('')
+const router = useRouter()
 
 async function handleLogin() {
   loading.value = true
@@ -25,6 +27,7 @@ async function handleLogin() {
 async function handleLogout() {
   try {
     await auth.logout()
+    router.push('/')
   } catch {
     error.value = 'Sign out failed. Please try again.'
   }

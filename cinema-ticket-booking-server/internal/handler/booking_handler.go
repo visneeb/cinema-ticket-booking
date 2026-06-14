@@ -1,57 +1,41 @@
 package handler
 
 import (
-	"context"
 	"errors"
 	"log"
 	"net/http"
 
 	firebaseAuth "firebase.google.com/go/v4/auth"
 	"github.com/gin-gonic/gin"
-	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 
+	"cinema-ticket-booking/internal/model"
 	"cinema-ticket-booking/internal/service"
 	wshub "cinema-ticket-booking/internal/websocket"
-	"cinema-ticket-booking/pkg/rabbitmq"
-	redispkg "cinema-ticket-booking/pkg/redis"
 )
 
-// Handler holds all service dependencies.
-type Handler struct {
-	DB        *mongo.Database
-	RDB       *redis.Client
-	MQ        *amqp.Connection
-	AuthCl    *firebaseAuth.Client
-	Publisher *rabbitmq.Publisher
-	Svc       *service.BookingService
-	Hub       *wshub.Hub
+// Services groups all service-layer dependencies injected into the Handler.
+type Services struct {
+	Booking *service.BookingService
+	User    service.UserService
+	Admin   service.AdminService
 }
 
-// New creates a Handler with injected dependencies.
-func New(
-	db *mongo.Database,
-	rdb *redis.Client,
-	mq *amqp.Connection,
-	authCl *firebaseAuth.Client,
-	pub *rabbitmq.Publisher,
-	svc *service.BookingService,
-	hub *wshub.Hub,
-) *Handler {
-	return &Handler{DB: db, RDB: rdb, MQ: mq, AuthCl: authCl, Publisher: pub, Svc: svc, Hub: hub}
+// Handler holds HTTP-layer dependencies: auth client, WebSocket hub, and services.
+type Handler struct {
+	AuthCl *firebaseAuth.Client
+	Hub    *wshub.Hub
+	Svcs   Services
+}
+
+// New creates a Handler.
+func New(authCl *firebaseAuth.Client, hub *wshub.Hub, svcs Services) *Handler {
+	return &Handler{AuthCl: authCl, Hub: hub, Svcs: svcs}
 }
 
 // --- Response/Request types ---
 
-type SeatResponse struct {
-	ID         string `json:"id"`
-	Label      string `json:"label"`
-	Status     string `json:"status"`
-	ShowtimeID string `json:"showtime_id"`
-}
+type SeatResponse = model.Seat
 
 type MessageResponse struct {
 	Message string `json:"message"`
@@ -62,11 +46,7 @@ type LockResponse struct {
 	SecondsLeft int64  `json:"seconds_left"`
 }
 
-// SeatLock describes a single active seat lock for the current user.
-type SeatLock struct {
-	SeatID      string `json:"seat_id"`
-	SecondsLeft int64  `json:"seconds_left"`
-}
+type SeatLock = model.SeatLock
 
 // MyLocksResponse lists all active seat locks the current user holds.
 type MyLocksResponse struct {
@@ -88,102 +68,20 @@ func (h *Handler) GetSeats(c *gin.Context) {
 	showtimeIDStr := c.Param("showtime_id")
 	ctx := c.Request.Context()
 
-	// Parse showtime_id as ObjectID — seed stores it as ObjectID, not string
 	showtimeOID, err := bson.ObjectIDFromHex(showtimeIDStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, MessageResponse{Message: "invalid showtime_id"})
 		return
 	}
 
-	// 1. Fetch seat documents from MongoDB, sorted by _id (insertion order = A1…D10).
-	// Without a sort the {showtime_id,status} index makes MongoDB return BOOKED
-	// seats last, causing them to visually "jump" to the end of the grid.
-	findOpts := options.Find().SetSort(bson.D{{Key: "_id", Value: 1}})
-	cursor, err := h.DB.Collection("seats").Find(ctx, bson.D{{Key: "showtime_id", Value: showtimeOID}}, findOpts)
+	seats, err := h.Svcs.Booking.GetSeats(ctx, showtimeOID)
 	if err != nil {
-		log.Printf("[GetSeats] mongo find error: %v", err)
+		log.Printf("[GetSeats] service error: %v", err)
 		c.JSON(http.StatusInternalServerError, MessageResponse{Message: "failed to fetch seats"})
 		return
 	}
-	defer cursor.Close(ctx)
 
-	var docs []struct {
-		ID         bson.ObjectID `bson:"_id"`
-		Label      string        `bson:"label"`
-		ShowtimeID bson.ObjectID `bson:"showtime_id"`
-		Status     string        `bson:"status"`
-	}
-	if err := cursor.All(ctx, &docs); err != nil {
-		log.Printf("[GetSeats] cursor decode error: %v", err)
-		c.JSON(http.StatusInternalServerError, MessageResponse{Message: "failed to read seats"})
-		return
-	}
-
-	if len(docs) == 0 {
-		c.JSON(http.StatusOK, []SeatResponse{})
-		return
-	}
-
-	// 2. Batch-fetch real-time status from Redis in one round-trip.
-	// Redis keys use hex strings — cheap to compute, URL-safe.
-	keys := make([]string, len(docs))
-	for i, doc := range docs {
-		keys[i] = "seat:status:" + showtimeIDStr + ":" + doc.ID.Hex()
-	}
-	redisVals, _ := h.RDB.MGet(ctx, keys...).Result()
-
-	// 3. Merge rules (Redis is the realtime layer, MongoDB is the permanent source of truth):
-	//   • Redis = "LOCKED"  → use LOCKED (ephemeral, Redis is authoritative)
-	//   • Redis = "BOOKED" AND MongoDB = "BOOKED" → use BOOKED
-	//   • Redis = "BOOKED" AND MongoDB ≠ "BOOKED" → stale Redis cache; trust MongoDB + evict key
-	//   • Redis empty AND MongoDB = "LOCKED" → lock expired; treat as AVAILABLE (zombie guard)
-	//   • Redis empty → use MongoDB (AVAILABLE or BOOKED)
-	result := make([]SeatResponse, len(docs))
-	for i, doc := range docs {
-		status := doc.Status
-		if status == "" {
-			status = "AVAILABLE"
-		}
-		if i < len(redisVals) && redisVals[i] != nil {
-			if redisStatus, ok := redisVals[i].(string); ok && redisStatus != "" {
-				if redisStatus == "BOOKED" && doc.Status != "BOOKED" {
-					// Redis says BOOKED but MongoDB was reset — evict the stale key.
-					go h.RDB.Del(ctx, keys[i])
-					// status stays whatever MongoDB says (AVAILABLE)
-				} else if redisStatus == "LOCKED" {
-					owner, err := redispkg.GetLockOwner(ctx, h.RDB, showtimeIDStr, doc.ID.Hex())
-					if err == nil && owner == "" {
-						// Stale LOCKED key: the lock itself expired, so this seat is actually available.
-						status = "AVAILABLE"
-						go h.RDB.Del(ctx, keys[i])
-						if doc.Status == "LOCKED" {
-							seatOID, oErr := bson.ObjectIDFromHex(doc.ID.Hex())
-							if oErr == nil {
-								go h.DB.Collection("seats").UpdateOne(context.Background(),
-									bson.D{{Key: "_id", Value: seatOID}},
-									bson.D{{Key: "$set", Value: bson.D{{Key: "status", Value: "AVAILABLE"}}}},
-								)
-							}
-						}
-					} else {
-						status = redisStatus
-					}
-				} else {
-					status = redisStatus
-				}
-			}
-		} else if status == "LOCKED" {
-			// MongoDB says LOCKED but Redis key is gone — lock already expired.
-			status = "AVAILABLE"
-		}
-		result[i] = SeatResponse{
-			ID:         doc.ID.Hex(),
-			Label:      doc.Label,
-			Status:     status,
-			ShowtimeID: doc.ShowtimeID.Hex(),
-		}
-	}
-	c.JSON(http.StatusOK, result)
+	c.JSON(http.StatusOK, seats)
 }
 
 // LockSeat acquires a 5-minute Redis lock and broadcasts LOCKED via WebSocket.
@@ -208,7 +106,7 @@ func (h *Handler) LockSeat(c *gin.Context) {
 	seatID := c.Param("seat_id")
 	log.Printf("[LockSeat] uid=%s showtime=%s seat=%s", uid, showtimeID, seatID)
 
-	secsLeft, err := h.Svc.LockSeat(c.Request.Context(), showtimeID, seatID, uid)
+	secsLeft, err := h.Svcs.Booking.LockSeat(c.Request.Context(), showtimeID, seatID, uid)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrSeatLocked), errors.Is(err, service.ErrSeatBooked):
@@ -228,7 +126,7 @@ func (h *Handler) LockSeat(c *gin.Context) {
 // @Produce      json
 // @Param        showtime_id  path  string  true  "Showtime ID"
 // @Param        seat_id      path  string  true  "Seat ID"
-// @Success      200  {object}  service.Booking
+// @Success      200  {object}  model.Booking
 // @Failure      401  {object}  MessageResponse
 // @Failure      403  {object}  MessageResponse
 // @Failure      500  {object}  MessageResponse
@@ -243,7 +141,7 @@ func (h *Handler) ConfirmBooking(c *gin.Context) {
 	seatID := c.Param("seat_id")
 	log.Printf("[ConfirmBooking] uid=%s showtime=%s seat=%s", uid, showtimeID, seatID)
 
-	booking, err := h.Svc.ConfirmBooking(c.Request.Context(), showtimeID, seatID, uid)
+	booking, err := h.Svcs.Booking.ConfirmBooking(c.Request.Context(), showtimeID, seatID, uid)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrLockNotOwned):
@@ -277,7 +175,7 @@ func (h *Handler) ReleaseLock(c *gin.Context) {
 	showtimeID := c.Param("showtime_id")
 	seatID := c.Param("seat_id")
 
-	if err := h.Svc.ReleaseLock(c.Request.Context(), showtimeID, seatID, uid); err != nil {
+	if err := h.Svcs.Booking.ReleaseLock(c.Request.Context(), showtimeID, seatID, uid); err != nil {
 		switch {
 		case errors.Is(err, service.ErrLockNotOwned):
 			c.JSON(http.StatusForbidden, MessageResponse{Message: err.Error()})
@@ -308,26 +206,11 @@ func (h *Handler) GetMyLock(c *gin.Context) {
 	showtimeID := c.Param("showtime_id")
 	ctx := c.Request.Context()
 
-	seatIDs, err := redispkg.GetUserLocks(ctx, h.RDB, showtimeID, uid)
-	if err != nil || len(seatIDs) == 0 {
-		c.JSON(http.StatusOK, MyLocksResponse{Locks: []SeatLock{}})
+	locks, err := h.Svcs.Booking.GetMyLocks(ctx, showtimeID, uid)
+	if err != nil {
+		log.Printf("[GetMyLock] service error: %v", err)
+		c.JSON(http.StatusInternalServerError, MessageResponse{Message: "failed to fetch locks"})
 		return
-	}
-
-	locks := make([]SeatLock, 0, len(seatIDs))
-	for _, seatID := range seatIDs {
-		owner, _ := redispkg.GetLockOwner(ctx, h.RDB, showtimeID, seatID)
-		if owner != uid {
-			// Stale entry — lock expired; remove it lazily.
-			redispkg.DelUserLock(ctx, h.RDB, showtimeID, uid, seatID)
-			continue
-		}
-		ttl, _ := redispkg.GetLockTTL(ctx, h.RDB, showtimeID, seatID)
-		secs := int64(ttl.Seconds())
-		if secs < 0 {
-			secs = 0
-		}
-		locks = append(locks, SeatLock{SeatID: seatID, SecondsLeft: secs})
 	}
 
 	c.JSON(http.StatusOK, MyLocksResponse{Locks: locks})

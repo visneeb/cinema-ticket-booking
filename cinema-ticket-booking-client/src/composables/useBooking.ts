@@ -1,7 +1,7 @@
 import { ref, computed, onUnmounted } from 'vue'
 import type { Ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { lockSeat, unlockSeat, bookSeat, getMyLocks } from '@/services/api/showtimeService'
+import { lockSeat, unlockSeat, bookSeat, getMyLocks } from '@/services/showtimeService'
 import type { Seat, SeatEvent } from '@/types/seat'
 
 export function useBooking(

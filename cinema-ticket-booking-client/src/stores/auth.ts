@@ -6,13 +6,16 @@ import api from '@/services/api/api'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
+  const role = ref<string | null>(null)
   const isReady = ref(false)
   const isAuthenticated = computed(() => user.value !== null)
+  const isAdmin = computed(() => role.value === 'admin')
 
-  // Upsert user profile to MongoDB — called on login and on session restore
+  // Upsert user profile to MongoDB and persist the returned role
   async function syncUser() {
     try {
-      await api.post('/api/users/me')
+      const res = await api.post('/api/users/me')
+      role.value = res.data.role ?? null
     } catch (e) {
       console.warn('[auth] syncUser failed:', e)
     }
@@ -24,6 +27,8 @@ export const useAuthStore = defineStore('auth', () => {
       if (u) {
         // Persist/update user in cinema.users on every sign-in or page reload
         await syncUser()
+      } else {
+        role.value = null
       }
       if (!isReady.value) {
         isReady.value = true
@@ -41,5 +46,5 @@ export const useAuthStore = defineStore('auth', () => {
     await signOut(auth)
   }
 
-  return { user, isReady, isAuthenticated, ready, loginWithGoogle, logout }
+  return { user, role, isReady, isAuthenticated, isAdmin, ready, loginWithGoogle, logout }
 })

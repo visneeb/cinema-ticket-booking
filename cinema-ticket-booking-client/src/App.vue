@@ -1,21 +1,23 @@
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import LoginSession from '@/components/auth/LoginSession.vue'
 
-const route = useRoute()
+const authStore = useAuthStore()
 </script>
 
 <template>
   <header class="app-header">
-    <span class="app-title"> Cinema Booking</span>
+    <div class="header-left">
+      <RouterLink :to="{ name: 'home' }" class="app-title">Cinema Booking</RouterLink>
+      <RouterLink v-if="authStore.isAdmin" :to="{ name: 'admin' }" class="admin-link"
+        >Admin Dashboard</RouterLink
+      >
+    </div>
     <LoginSession />
   </header>
 
   <main class="app-main">
-    <!-- key forces a fresh component instance on every route change,
-         so fetchSeats / fetchShowtimes and useShowtimeSocket always
-         start from scratch with the correct showtimeId. -->
-    <RouterView :key="route.path" />
+    <RouterView />
   </main>
 </template>
 
@@ -29,9 +31,32 @@ const route = useRoute()
   background: #fff;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
 .app-title {
   font-size: 18px;
   font-weight: 700;
+  color: inherit;
+  text-decoration: none;
+}
+
+.admin-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+  padding: 4px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  background: #eff6ff;
+}
+
+.admin-link:hover {
+  background: #dbeafe;
 }
 
 .app-main {

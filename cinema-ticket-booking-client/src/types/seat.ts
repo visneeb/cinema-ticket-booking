@@ -1,4 +1,4 @@
-/** Server statuses: AVAILABLE | LOCKED | BOOKED. SELECTED is client-only visual state. */
+/** Server-persisted statuses. 'SELECTED' is client-only optimistic state. */
 export type SeatStatus = 'AVAILABLE' | 'LOCKED' | 'BOOKED' | 'SELECTED'
 
 export interface Seat {
@@ -15,14 +15,6 @@ export interface SeatEvent {
 }
 
 export interface SeatLock {
-  seat_id: string // ObjectID hex
+  seat_id: string
   seconds_left: number
-}
-
-export interface Showtime {
-  id: string // ObjectID hex
-  movie_id: string // ObjectID hex
-  starts_at: string // ISO-8601 date string
-  title: string
-  description: string
 }

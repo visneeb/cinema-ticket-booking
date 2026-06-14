@@ -24,9 +24,9 @@ export default defineConfig({
       'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
     },
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': process.env.VITE_API_BASE || 'http://localhost:8080',
       '/ws': {
-        target: 'ws://localhost:8080',
+        target: (process.env.VITE_API_BASE || 'http://localhost:8080').replace(/^http/, 'ws'),
         ws: true,
       },
     },

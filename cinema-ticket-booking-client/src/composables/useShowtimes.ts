@@ -1,6 +1,6 @@
 import { ref } from 'vue'
-import { getShowtimes } from '@/services/api/showtimeService'
-import type { Showtime } from '@/types/seat'
+import { getShowtimes } from '@/services/showtimeService'
+import type { Showtime } from '@/types/showtime'
 
 export function useShowtimes() {
   const showtimes = ref<Showtime[]>([])

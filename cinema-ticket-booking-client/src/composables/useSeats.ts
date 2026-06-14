@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import type { Ref } from 'vue'
-import { getSeats } from '@/services/api/showtimeService'
+import { getSeats } from '@/services/showtimeService'
 import { isValidObjectId } from '@/utils/validate'
 import type { Seat } from '@/types/seat'
 

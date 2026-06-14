@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { useShowtimeSocket } from '@/composables/useShowtimeSocket'
+import { useShowtimeSocket, type WsStatus } from '@/composables/useShowtimeSocket'
 import { useShowtimes } from '@/composables/useShowtimes'
 import { useSeats } from '@/composables/useSeats'
 import { useBooking } from '@/composables/useBooking'
@@ -51,10 +51,43 @@ const {
   resetBookingState,
 } = useBooking(showtimeId, seats, fetchSeats)
 
-const { lastEvent, wsStatus } = useShowtimeSocket(showtimeId.value)
-watch(lastEvent, (event) => {
-  if (event) onSeatEvent(event)
-})
+// WebSocket — tracked reactively so the banner updates correctly
+const wsStatus = ref<WsStatus>('open')
+let socketCleanup: (() => void) | null = null
+
+function connectSocket(id: string) {
+  if (socketCleanup) socketCleanup()
+  if (!id) {
+    wsStatus.value = 'open'
+    return
+  }
+  const { lastEvent, wsStatus: sockStatus, cleanup } = useShowtimeSocket(id)
+  socketCleanup = cleanup
+  watch(
+    sockStatus,
+    (s) => {
+      wsStatus.value = s
+    },
+    { immediate: true },
+  )
+  watch(lastEvent, (event) => {
+    if (event) onSeatEvent(event)
+  })
+}
+
+// Bootstrap + re-bootstrap on navigation (home ↔ showtime)
+watch(
+  showtimeId,
+  (id) => {
+    if (!id) {
+      fetchShowtimes()
+    } else {
+      connectSocket(id)
+      fetchSeats().then(() => restoreLockState())
+    }
+  },
+  { immediate: true },
+)
 
 // Re-sync on auth change (showtime page only)
 watch(
@@ -70,12 +103,9 @@ watch(
   },
 )
 
-// Bootstrap
-if (isHome.value) {
-  fetchShowtimes()
-} else {
-  fetchSeats().then(() => restoreLockState())
-}
+onUnmounted(() => {
+  if (socketCleanup) socketCleanup()
+})
 </script>
 
 <template>

@@ -18,10 +18,15 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    headers: {
+      // Required for Firebase signInWithPopup — allows the Google OAuth popup
+      // to communicate back to the app window.
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+    },
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': process.env.VITE_API_BASE || 'http://localhost:8080',
       '/ws': {
-        target: 'ws://localhost:8080',
+        target: (process.env.VITE_API_BASE || 'http://localhost:8080').replace(/^http/, 'ws'),
         ws: true,
       },
     },

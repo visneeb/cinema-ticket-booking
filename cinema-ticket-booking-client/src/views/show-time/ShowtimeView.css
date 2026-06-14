@@ -1,0 +1,249 @@
+/* ── Shared ─────────────────────────────────────────────────────────────── */
+.home-view,
+.showtime-view {
+  max-width: 820px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 28px;
+}
+
+.view-header {
+  text-align: center;
+  width: 100%;
+}
+.title {
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+.subtitle {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.state-msg {
+  color: #64748b;
+}
+.state-msg--error {
+  color: #ef4444;
+}
+
+/* ── Home: showtime list ─────────────────────────────────────────────────── */
+.showtime-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 18px;
+  width: 100%;
+}
+
+.showtime-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    box-shadow 0.15s,
+    border-color 0.15s;
+}
+.showtime-card:hover {
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+  border-color: #93c5fd;
+}
+
+.card-movie {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e293b;
+}
+.card-desc {
+  font-size: 13px;
+  color: #64748b;
+}
+.card-time {
+  font-size: 13px;
+  color: #475569;
+  margin-top: 4px;
+}
+.card-cta {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2563eb;
+}
+
+/* ── Showtime: seat view ─────────────────────────────────────────────────── */
+.back-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.back-btn:hover {
+  text-decoration: underline;
+}
+
+.ws-banner {
+  width: 100%;
+  padding: 8px 16px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+}
+.ws-banner--connecting {
+  background: #fef9c3;
+  color: #854d0e;
+}
+.ws-banner--closed {
+  background: #ffedd5;
+  color: #9a3412;
+}
+.ws-banner--error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.signin-notice {
+  padding: 12px 20px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  color: #1e40af;
+  font-size: 14px;
+}
+
+/* ── Booking panel ───────────────────────────────────────────────────────── */
+.booking-panel {
+  width: 100%;
+  max-width: 460px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+.panel-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.panel-seat {
+  font-size: 20px;
+  font-weight: 700;
+}
+.panel-timer {
+  font-size: 18px;
+  font-weight: 700;
+  color: #16a34a;
+  font-variant-numeric: tabular-nums;
+}
+.panel-timer--urgent {
+  color: #dc2626;
+}
+.panel-tag {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 99px;
+}
+.panel-tag--selected {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+.panel-seat-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.seat-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 99px;
+}
+.seat-chip--selected {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+.seat-chip--locked {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+.panel-hint {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+}
+.panel-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.btn {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-reserve {
+  background: #7c3aed;
+  color: #fff;
+}
+.btn-reserve:hover:not(:disabled) {
+  background: #6d28d9;
+}
+.btn-confirm {
+  background: #2563eb;
+  color: #fff;
+}
+.btn-confirm:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+.btn-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-cancel {
+  background: #e2e8f0;
+  color: #334155;
+}
+.btn-cancel:hover {
+  background: #cbd5e1;
+}
+
+.action-error {
+  color: #dc2626;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ── Transitions ─────────────────────────────────────────────────────────── */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.25s ease;
+}
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(14px);
+}

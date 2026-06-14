@@ -183,7 +183,8 @@ cd ctb
 
 # 2. Copy and fill in the environment file
 cp .env.example .env
-# Edit .env — fill in MONGO_URI, RABBITMQ_USER, RABBITMQ_PASS, all VITE_FIREBASE_* keys
+# Edit .env — fill in MONGO_URI, RABBITMQ_USER, RABBITMQ_PASS, VITE_FIREBASE_* keys
+# If deploying to a server (not localhost), also set CORS_ORIGINS=https://yourdomain.com
 
 # 3. Place your Firebase service account at the project root
 #    (download from Firebase Console → Project Settings → Service Accounts)
@@ -243,3 +244,4 @@ go test ./...
 | 7 | **MongoDB Atlas (no self-hosted Mongo)** | No Mongo container to manage. Trade-off: requires internet access and an Atlas account; not fully air-gapped. |
 | 8 | **Single backend instance** | Keeps architecture simple. Trade-off: the WebSocket hub, RabbitMQ connection, and Redis connection are all per-process — horizontal scaling requires additional work. |
 | 9 | **Admin dashboard shows only confirmed bookings** | `LOCKED` state exists only in Redis (not in the `bookings` collection), so the admin table cannot show in-progress seat holds by design. |
+| 10 | CORS origins are env-configurable | CORS_ORIGINS in .env controls allowed browser origins. Defaults to http://localhost:3000 for Docker. For real deployments, set it to your domain. |

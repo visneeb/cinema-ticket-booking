@@ -11,7 +11,7 @@ version: "3.9"
 #   backend   :8080  → Go API (Gin) + WebSocket hub + RabbitMQ worker
 #   redis     :6379  → Redis (distributed seat locks, TTL 5m)
 #   rabbitmq  :5672  → RabbitMQ 4 (async events)
-#              :15672 → RabbitMQ management UI 
+#              :15672 → RabbitMQ management UI
 #
 # MongoDB is hosted on Atlas — set MONGO_URI in .env
 # ─────────────────────────────────────────────────────────────────────────────
@@ -30,6 +30,7 @@ services:
       REDIS_ADDR: "redis:6379"
       RABBITMQ_URL: "amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/"
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-sa.json
+      CORS_ORIGINS: "${CORS_ORIGINS:-http://localhost:3000}"
     volumes:
       - ./firebase-service-account.json:/run/secrets/firebase-sa.json:ro
     ports:

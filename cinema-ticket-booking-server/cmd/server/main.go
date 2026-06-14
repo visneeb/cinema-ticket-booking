@@ -80,7 +80,7 @@ func main() {
 		User:    userSvc,
 		Admin:   adminSvc,
 	})
-	router := setupRouter(h, userRepo)
+	router := setupRouter(h, userRepo, cfg)
 	runServer(router, cfg.Port)
 }
 
@@ -116,11 +116,11 @@ func initFirebase(ctx context.Context) *firebaseAuth.Client {
 	return authClient
 }
 
-func setupRouter(h *handler.Handler, userRepo *repository.UserRepository) *gin.Engine {
+func setupRouter(h *handler.Handler, userRepo *repository.UserRepository, cfg *config.Config) *gin.Engine {
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins: []string{"http://localhost:5173", "http://localhost:3000"},
+		AllowOrigins: cfg.CORSOrigins,
 		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders: []string{"Authorization", "Content-Type"},
 	}))

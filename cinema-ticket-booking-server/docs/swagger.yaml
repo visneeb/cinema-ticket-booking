@@ -49,8 +49,6 @@ paths:
       - seats
   /api/showtimes/{showtime_id}/seats/{seat_id}/book:
     post:
-      consumes:
-      - application/json
       parameters:
       - description: Showtime ID
         in: path
@@ -73,8 +71,12 @@ paths:
           description: Unauthorized
           schema:
             $ref: '#/definitions/handler.MessageResponse'
-        "404":
-          description: Not Found
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "500":
+          description: Internal Server Error
           schema:
             $ref: '#/definitions/handler.MessageResponse'
       security:
@@ -84,8 +86,6 @@ paths:
       - bookings
   /api/showtimes/{showtime_id}/seats/{seat_id}/lock:
     post:
-      consumes:
-      - application/json
       parameters:
       - description: Showtime ID
         in: path
@@ -110,6 +110,10 @@ paths:
             $ref: '#/definitions/handler.MessageResponse'
         "409":
           description: Conflict
+          schema:
+            $ref: '#/definitions/handler.MessageResponse'
+        "500":
+          description: Internal Server Error
           schema:
             $ref: '#/definitions/handler.MessageResponse'
       security:

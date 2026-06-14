@@ -3,8 +3,15 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	firebase "firebase.google.com/go/v4"
+	firebaseAuth "firebase.google.com/go/v4/auth"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/redis/go-redis/v9"
@@ -16,6 +23,8 @@ import (
 	_ "cinema-ticket-booking/docs"
 	"cinema-ticket-booking/internal/config"
 	"cinema-ticket-booking/internal/handler"
+	"cinema-ticket-booking/internal/middleware"
+	"cinema-ticket-booking/pkg/rabbitmq"
 )
 
 // @title           Cinema Ticket Booking API
@@ -26,61 +35,109 @@ import (
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
-
 func main() {
-    cfg := config.Load()
+	cfg := config.Load()
+	ctx := context.Background()
 
-    ctx := context.Background()
+	db := connectMongo(cfg)
+	rdb := connectRedis(cfg)
+	mq := connectRabbitMQ(cfg)
+	authCl := initFirebase(ctx)
 
-    // MongoDB Atlas
-    mongoClient, err := mongo.Connect(options.Client().ApplyURI(cfg.MongoURI))
-    if err != nil {
-        log.Fatalf("mongo connect: %v", err)
-    }
-    db := mongoClient.Database(cfg.MongoDB)
+	pub, err := rabbitmq.NewPublisher(mq)
+	if err != nil {
+		log.Fatalf("rabbitmq publisher: %v", err)
+	}
 
-    // Redis
-    rdb := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	h := handler.New(db, rdb, mq, authCl, pub)
+	router := setupRouter(h)
+	runServer(router, cfg.Port)
+}
 
-    // RabbitMQ 
-    amqpConn, err := amqp.Dial(cfg.RabbitMQURL)
-    if err != nil {
-        log.Fatalf("rabbitmq connect: %v", err)
-    }
+func connectMongo(cfg *config.Config) *mongo.Database {
+	client, err := mongo.Connect(options.Client().ApplyURI(cfg.MongoURI))
+	if err != nil {
+		log.Fatalf("mongo connect: %v", err)
+	}
+	return client.Database(cfg.MongoDB)
+}
 
-    // Firebase Admin SDK
-    firebaseApp, err := firebase.NewApp(ctx, nil)
-    if err != nil {
-        log.Fatalf("firebase init: %v", err)
-    }
-    authClient, err := firebaseApp.Auth(ctx)
-    if err != nil {
-        log.Fatalf("firebase auth: %v", err)
-    }
+func connectRedis(cfg *config.Config) *redis.Client {
+	return redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+}
 
-    // Router
-    router := gin.Default()
-    router.GET("/ping", func(c *gin.Context) {
-        c.JSON(200, gin.H{"message": "pong"})
-    })
+func connectRabbitMQ(cfg *config.Config) *amqp.Connection {
+	conn, err := amqp.Dial(cfg.RabbitMQURL)
+	if err != nil {
+		log.Fatalf("rabbitmq connect: %v", err)
+	}
+	return conn
+}
 
-    // Swagger UI — http://localhost:8080/swagger/index.html
-    router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+func initFirebase(ctx context.Context) *firebaseAuth.Client {
+	app, err := firebase.NewApp(ctx, nil)
+	if err != nil {
+		log.Fatalf("firebase init: %v", err)
+	}
+	authClient, err := app.Auth(ctx)
+	if err != nil {
+		log.Fatalf("firebase auth: %v", err)
+	}
+	return authClient
+}
 
-    api := router.Group("/api")
-    {
-        api.GET("/showtimes/:showtime_id/seats", handler.GetSeats)
-        api.POST("/showtimes/:showtime_id/seats/:seat_id/lock", handler.LockSeat)
-        api.POST("/showtimes/:showtime_id/seats/:seat_id/book", handler.ConfirmBooking)
-    }
+func setupRouter(h *handler.Handler) *gin.Engine {
+	router := gin.Default()
 
-    log.Printf("server starting on :%s", cfg.Port)
-    if err := router.Run(":" + cfg.Port); err != nil {
-        log.Fatalf("server: %v", err)
-    }
+	router.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"http://localhost:5173", "http://localhost:3000"},
+		AllowMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders: []string{"Authorization", "Content-Type"},
+	}))
 
-    _ = db
-    _ = rdb
-    _ = amqpConn
-    _ = authClient
+	router.GET("/ping", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"message": "pong"})
+	})
+
+	// Swagger UI — http://localhost:8080/swagger/index.html
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
+	api := router.Group("/api")
+	{
+		// Users
+		api.POST("/users/me", middleware.Auth(h.AuthCl), h.UpsertUser)
+
+		// Showtimes & Bookings
+		api.GET("/showtimes/:showtime_id/seats", h.GetSeats)
+		api.POST("/showtimes/:showtime_id/seats/:seat_id/lock", middleware.Auth(h.AuthCl), h.LockSeat)
+		api.POST("/showtimes/:showtime_id/seats/:seat_id/book", middleware.Auth(h.AuthCl), h.ConfirmBooking)
+	}
+
+	return router
+}
+
+func runServer(router *gin.Engine, port string) {
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: router,
+	}
+
+	go func() {
+		log.Printf("server starting on :%s", port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("server forced shutdown: %v", err)
+	}
+	log.Println("server exited")
 }

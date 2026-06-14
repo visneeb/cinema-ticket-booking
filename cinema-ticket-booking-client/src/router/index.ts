@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import ShowtimeView from '@/views/ShowtimeView.vue'
+import ShowtimeView from '@/views/show-time/ShowtimeView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -14,7 +14,6 @@ const router = createRouter({
       path: '/showtimes/:showtimeId',
       name: 'showtime',
       component: ShowtimeView,
-      meta: { requiresAuth: true },
     },
   ],
 })
